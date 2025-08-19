@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OKX Derivatives Dashboard</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>OKX Derivatives Dashboard</h1>
+            <div class="controls">
+                <div class="time-window">
+                    <label>Time Window:</label>
+                    <div class="time-buttons">
+                        <button class="time-btn active" data-time="4h">4H</button>
+                        <button class="time-btn" data-time="12h">12H</button>
+                        <button class="time-btn" data-time="24h">24H</button>
+                        <button class="time-btn" data-time="7d">7D</button>
+                    </div>
+                </div>
+                <div class="search">
+                    <label for="searchInput">Search Ticker:</label>
+                    <input type="text" id="searchInput" placeholder="e.g., BTC-USDT-SWAP">
+                </div>
+                <div class="refresh-info">
+                    <span id="lastUpdate">Last update: Never</span>
+                    <button id="refreshBtn">Refresh Now</button>
+                </div>
+                <div class="ginarea-link-container">
+                    <a href="https://ginarea.org/faq/markets" target="_blank" class="ginarea-link">Available pairs</a>
+                </div>
+            </div>
+        </header>
+
+        <main>
+            <div class="dashboard-grid">
+                <div class="column">
+                    <h2 class="column-title gainers">Top Gainers</h2>
+                    <div class="table-container">
+                        <table id="gainersTable">
+                            <thead>
+                                <tr>
+                                    <th>Ticker</th>
+                                    <th>Price Change %</th>
+                                    <th>Volume (24h)</th>
+                                </tr>
+                            </thead>
+                            <tbody id="gainersBody">
+                                <tr>
+                                    <td colspan="3" class="loading">Loading data...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                
+                <div class="column">
+                    <h2 class="column-title losers">Top Losers</h2>
+                    <div class="table-container">
+                        <table id="losersTable">
+                            <thead>
+                                <tr>
+                                    <th>Ticker</th>
+                                    <th>Price Change %</th>
+                                    <th>Volume (24h)</th>
+                                </tr>
+                            </thead>
+                            <tbody id="losersBody">
+                                <tr>
+                                    <td colspan="3" class="loading">Loading data...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <footer>
+            <p>Data from OKX API v5 | Auto-refresh every hour | Full refresh every hour</p>
+        </footer>
+    </div>
+
+    <script src="main.js"></script>
+</body>
+</html>
