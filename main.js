@@ -60,15 +60,19 @@ class OKXDashboard {
 
     async loadData() {
         try {
+            console.log('Starting loadData...');
             this.showLoading();
             
             // Load main tickers data
+            console.log('Fetching tickers...');
             const tickersData = await this.fetchTickers();
+            console.log('Fetched tickers:', tickersData.length, 'items');
             
             // Filter USDT-SWAP contracts
             const swapData = tickersData.filter(item => 
                 item.instId.endsWith('-USDT-SWAP')
             );
+            console.log('Filtered SWAP data:', swapData.length, 'items');
 
             // Get top N by volume for detailed data
             const topByVolume = swapData
@@ -78,19 +82,26 @@ class OKXDashboard {
                     return volB - volA;
                 })
                 .slice(0, this.topN);
+            console.log('Top by volume:', topByVolume.length, 'items');
 
             // Load detailed candle data for top N
+            console.log('Fetching detailed data...');
             const detailedData = await this.fetchDetailedData(topByVolume);
+            console.log('Detailed data keys:', Object.keys(detailedData).length);
             
             // Process new data
+            console.log('Processing data...');
             const newData = this.processData(swapData, detailedData);
             console.log('Processed new data:', newData.length, 'items');
             
             // Merge with existing data (add new items, update existing ones)
+            console.log('Merging data...');
             this.mergeData(newData);
             
+            console.log('Filtering and rendering...');
             this.filterAndRender();
             this.updateLastUpdate();
+            console.log('loadData completed successfully');
             
         } catch (error) {
             console.error('Error loading data:', error);
@@ -366,16 +377,16 @@ class OKXDashboard {
         return volume.toFixed(2);
     }
 
-    getChangeClass(value) {
-        if (value > 0) return 'positive';
-        if (value < 0) return 'negative';
-        return 'neutral';
-    }
-
     updateLastUpdate() {
         this.lastUpdate = new Date();
         const timeString = this.lastUpdate.toLocaleTimeString();
-        document.getElementById('lastUpdate').textContent = `Last update: ${timeString}`;
+        const lastUpdateElement = document.getElementById('lastUpdate');
+        if (lastUpdateElement) {
+            lastUpdateElement.textContent = `Last update: ${timeString}`;
+            console.log('Updated last update time:', timeString);
+        } else {
+            console.error('Could not find lastUpdate element');
+        }
     }
 
     startAutoRefresh() {
