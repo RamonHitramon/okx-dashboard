@@ -111,13 +111,27 @@ class OKXDashboard {
     async fetchDetailedData(topData) {
         const detailedData = {};
         
+        // Get appropriate bar size and limit based on time window
+        const getBarConfig = (timeWindow) => {
+            switch (timeWindow) {
+                case '4h': return { bar: '1H', limit: 4 };
+                case '12h': return { bar: '1H', limit: 12 };
+                case '24h': return { bar: '1D', limit: 1 };
+                case '7d': return { bar: '1D', limit: 7 };
+                default: return { bar: '1H', limit: 24 };
+            }
+        };
+        
+        const { bar, limit } = getBarConfig(this.timeWindow);
+        console.log(`Fetching detailed data with bar=${bar}, limit=${limit} for timeWindow=${this.timeWindow}`);
+        
         // Throttle requests to avoid rate limiting
-        for (let i = 0; i < topData.length; i += 5) {
-            const batch = topData.slice(i, i + 5);
+        for (let i = 0; i < topData.length; i += 3) {
+            const batch = topData.slice(i, i + 3);
             const promises = batch.map(async (item) => {
                 try {
                     const response = await fetch(
-                        `https://www.okx.com/api/v5/market/candles?instId=${item.instId}&bar=1H&limit=48`
+                        `https://www.okx.com/api/v5/market/candles?instId=${item.instId}&bar=${bar}&limit=${limit}`
                     );
                     const data = await response.json();
                     
@@ -141,8 +155,8 @@ class OKXDashboard {
             });
             
             // Small delay between batches
-            if (i + 5 < topData.length) {
-                await new Promise(resolve => setTimeout(resolve, 200));
+            if (i + 3 < topData.length) {
+                await new Promise(resolve => setTimeout(resolve, 500));
             }
         }
         
@@ -162,29 +176,46 @@ class OKXDashboard {
             
             console.log(`Volume calculation for ${item.instId}: vol24h=${vol24h}, last=${last}, volume24h=${volume24h}`);
             
-            // Calculate price change based on time window
+            // Calculate price change based on time window using appropriate candles
             let priceChange = priceChange24h; // Default to 24h
             
-            if (this.timeWindow === '4h' && detailedData[item.instId] && detailedData[item.instId].length >= 4) {
+            if (detailedData[item.instId] && detailedData[item.instId].length > 0) {
                 const candles = detailedData[item.instId];
-                const candle4hAgo = candles[3]; // 4 hours ago
-                if (candle4hAgo) {
-                    const open4hAgo = parseFloat(candle4hAgo[1]);
-                    priceChange = open4hAgo > 0 ? ((last - open4hAgo) / open4hAgo) * 100 : 0;
-                }
-            } else if (this.timeWindow === '12h' && detailedData[item.instId] && detailedData[item.instId].length >= 12) {
-                const candles = detailedData[item.instId];
-                const candle12hAgo = candles[11]; // 12 hours ago
-                if (candle12hAgo) {
-                    const open12hAgo = parseFloat(candle12hAgo[1]);
-                    priceChange = open12hAgo > 0 ? ((last - open12hAgo) / open12hAgo) * 100 : 0;
-                }
-            } else if (this.timeWindow === '7d' && detailedData[item.instId] && detailedData[item.instId].length >= 168) {
-                const candles = detailedData[item.instId];
-                const candle7dAgo = candles[167]; // 7 days ago
-                if (candle7dAgo) {
-                    const open7dAgo = parseFloat(candle7dAgo[1]);
-                    priceChange = open7dAgo > 0 ? ((last - open7dAgo) / open7dAgo) * 100 : 0;
+                
+                if (this.timeWindow === '4h' && candles.length >= 4) {
+                    // For 4h: use 1H candles, take the 4th candle (4 hours ago)
+                    const candle4hAgo = candles[3];
+                    if (candle4hAgo) {
+                        const open4hAgo = parseFloat(candle4hAgo[1]);
+                        priceChange = open4hAgo > 0 ? ((last - open4hAgo) / open4hAgo) * 100 : 0;
+                        console.log(`${item.instId} 4H: last=${last}, open4hAgo=${open4hAgo}, change=${priceChange.toFixed(2)}%`);
+                    }
+                } else if (this.timeWindow === '12h' && candles.length >= 12) {
+                    // For 12h: use 1H candles, take the 12th candle (12 hours ago)
+                    const candle12hAgo = candles[11];
+                    if (candle12hAgo) {
+                        const open12hAgo = parseFloat(candle12hAgo[1]);
+                        priceChange = open12hAgo > 0 ? ((last - open12hAgo) / open12hAgo) * 100 : 0;
+                        console.log(`${item.instId} 12H: last=${last}, open12hAgo=${open12hAgo}, change=${priceChange.toFixed(2)}%`);
+                    }
+                } else if (this.timeWindow === '24h') {
+                    // For 24h: use 1D candle, take the 1st candle (1 day ago)
+                    if (candles.length >= 1) {
+                        const candle24hAgo = candles[0];
+                        if (candle24hAgo) {
+                            const open24hAgo = parseFloat(candle24hAgo[1]);
+                            priceChange = open24hAgo > 0 ? ((last - open24hAgo) / open24hAgo) * 100 : 0;
+                            console.log(`${item.instId} 24H: last=${last}, open24hAgo=${open24hAgo}, change=${priceChange.toFixed(2)}%`);
+                        }
+                    }
+                } else if (this.timeWindow === '7d' && candles.length >= 7) {
+                    // For 7d: use 1D candles, take the 7th candle (7 days ago)
+                    const candle7dAgo = candles[6];
+                    if (candle7dAgo) {
+                        const open7dAgo = parseFloat(candle7dAgo[1]);
+                        priceChange = open7dAgo > 0 ? ((last - open7dAgo) / open7dAgo) * 100 : 0;
+                        console.log(`${item.instId} 7D: last=${last}, open7dAgo=${open7dAgo}, change=${priceChange.toFixed(2)}%`);
+                    }
                 }
             }
             
