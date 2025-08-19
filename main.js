@@ -42,10 +42,7 @@ class OKXDashboard {
             this.filterAndRender();
         });
 
-        // Manual refresh button
-        document.getElementById('refreshBtn').addEventListener('click', () => {
-            this.loadData();
-        });
+
     }
 
     async loadGinareaTickers() {
@@ -85,9 +82,13 @@ class OKXDashboard {
             // Load detailed candle data for top N
             const detailedData = await this.fetchDetailedData(topByVolume);
             
-            // Merge and process data
-            this.data = this.processData(swapData, detailedData);
-            console.log('Processed data:', this.data.length, 'items');
+            // Process new data
+            const newData = this.processData(swapData, detailedData);
+            console.log('Processed new data:', newData.length, 'items');
+            
+            // Merge with existing data (add new items, update existing ones)
+            this.mergeData(newData);
+            
             this.filterAndRender();
             this.updateLastUpdate();
             
@@ -150,6 +151,24 @@ class OKXDashboard {
         }
         
         return detailedData;
+    }
+
+    // Merge new data with existing data
+    mergeData(newData) {
+        // Create a map of existing data by ticker
+        const existingMap = new Map();
+        this.data.forEach(item => {
+            existingMap.set(item.ticker, item);
+        });
+        
+        // Update existing items and add new ones
+        newData.forEach(newItem => {
+            existingMap.set(newItem.ticker, newItem);
+        });
+        
+        // Convert back to array
+        this.data = Array.from(existingMap.values());
+        console.log('Merged data total:', this.data.length, 'items');
     }
 
     // Utility function to calculate price change for any time window
@@ -360,13 +379,16 @@ class OKXDashboard {
     }
 
     startAutoRefresh() {
-        // Auto refresh every hour
+        // Auto-refresh every 10 minutes
         this.updateInterval = setInterval(() => {
+            console.log('Auto-refresh triggered (10 minutes)');
             this.loadData();
-        }, 60 * 60 * 1000); // 1 hour
+        }, 10 * 60 * 1000); // 10 minutes
         
-        // Full refresh every hour (same as auto refresh for now)
+        // Full refresh every hour
         this.fullRefreshInterval = setInterval(() => {
+            console.log('Full refresh triggered (1 hour)');
+            this.data = []; // Clear existing data
             this.loadData();
         }, 60 * 60 * 1000); // 1 hour
     }
