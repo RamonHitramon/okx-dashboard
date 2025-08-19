@@ -111,19 +111,8 @@ class OKXDashboard {
     async fetchDetailedData(topData) {
         const detailedData = {};
         
-        // Get appropriate bar size and limit based on time window
-        const getBarConfig = (timeWindow) => {
-            switch (timeWindow) {
-                case '4h': return { bar: '1H', limit: 4 };
-                case '12h': return { bar: '1H', limit: 12 };
-                case '24h': return { bar: '1D', limit: 1 };
-                case '7d': return { bar: '1D', limit: 7 };
-                default: return { bar: '1H', limit: 24 };
-            }
-        };
-        
-        const { bar, limit } = getBarConfig(this.timeWindow);
-        console.log(`Fetching detailed data with bar=${bar}, limit=${limit} for timeWindow=${this.timeWindow}`);
+        // Always fetch 1H candles with limit=169 to cover all time windows (7d = 168 hours + current)
+        console.log(`Fetching 1H candles with limit=169 for all time windows`);
         
         // Throttle requests to avoid rate limiting
         for (let i = 0; i < topData.length; i += 3) {
@@ -131,7 +120,7 @@ class OKXDashboard {
             const promises = batch.map(async (item) => {
                 try {
                     const response = await fetch(
-                        `https://www.okx.com/api/v5/market/candles?instId=${item.instId}&bar=${bar}&limit=${limit}`
+                        `https://www.okx.com/api/v5/market/candles?instId=${item.instId}&bar=1H&limit=169`
                     );
                     const data = await response.json();
                     
@@ -163,66 +152,54 @@ class OKXDashboard {
         return detailedData;
     }
 
+    // Utility function to calculate price change for any time window
+    calcDelta(candles, last, hoursBack) {
+        if (!candles || candles.length <= hoursBack) {
+            return null; // Not enough data
+        }
+        
+        const candle = candles[hoursBack];
+        if (!candle || !candle[1]) {
+            return null; // Invalid candle data
+        }
+        
+        const openPrice = parseFloat(candle[1]);
+        if (openPrice <= 0) {
+            return null; // Invalid open price
+        }
+        
+        return ((last - openPrice) / openPrice) * 100;
+    }
+
     processData(tickersData, detailedData) {
         return tickersData.map(item => {
             const last = parseFloat(item.last);
-            const open24h = parseFloat(item.open24h);
-            const volCcy24h = parseFloat(item.volCcy24h || '0');
             const vol24h = parseFloat(item.vol24h || '0');
-            
-            // Calculate 24h metrics
-            const priceChange24h = open24h > 0 ? ((last - open24h) / open24h) * 100 : 0;
             const volume24h = vol24h * last; // Always use vol24h * last
             
             console.log(`Volume calculation for ${item.instId}: vol24h=${vol24h}, last=${last}, volume24h=${volume24h}`);
             
-            // Calculate price change based on time window using appropriate candles
-            let priceChange = priceChange24h; // Default to 24h
+            // Calculate all price changes using 1H candles
+            const candles = detailedData[item.instId] || [];
+            const priceChange1h = this.calcDelta(candles, last, 1);  // 1 hour ago
+            const priceChange4h = this.calcDelta(candles, last, 4);  // 4 hours ago
+            const priceChange12h = this.calcDelta(candles, last, 12); // 12 hours ago
+            const priceChange24h = this.calcDelta(candles, last, 24); // 24 hours ago
+            const priceChange7d = this.calcDelta(candles, last, 168); // 7 days ago (168 hours)
             
-            if (detailedData[item.instId] && detailedData[item.instId].length > 0) {
-                const candles = detailedData[item.instId];
-                
-                if (this.timeWindow === '4h' && candles.length >= 4) {
-                    // For 4h: use 1H candles, take the 4th candle (4 hours ago)
-                    const candle4hAgo = candles[3];
-                    if (candle4hAgo) {
-                        const open4hAgo = parseFloat(candle4hAgo[1]);
-                        priceChange = open4hAgo > 0 ? ((last - open4hAgo) / open4hAgo) * 100 : 0;
-                        console.log(`${item.instId} 4H: last=${last}, open4hAgo=${open4hAgo}, change=${priceChange.toFixed(2)}%`);
-                    }
-                } else if (this.timeWindow === '12h' && candles.length >= 12) {
-                    // For 12h: use 1H candles, take the 12th candle (12 hours ago)
-                    const candle12hAgo = candles[11];
-                    if (candle12hAgo) {
-                        const open12hAgo = parseFloat(candle12hAgo[1]);
-                        priceChange = open12hAgo > 0 ? ((last - open12hAgo) / open12hAgo) * 100 : 0;
-                        console.log(`${item.instId} 12H: last=${last}, open12hAgo=${open12hAgo}, change=${priceChange.toFixed(2)}%`);
-                    }
-                } else if (this.timeWindow === '24h') {
-                    // For 24h: use 1D candle, take the 1st candle (1 day ago)
-                    if (candles.length >= 1) {
-                        const candle24hAgo = candles[0];
-                        if (candle24hAgo) {
-                            const open24hAgo = parseFloat(candle24hAgo[1]);
-                            priceChange = open24hAgo > 0 ? ((last - open24hAgo) / open24hAgo) * 100 : 0;
-                            console.log(`${item.instId} 24H: last=${last}, open24hAgo=${open24hAgo}, change=${priceChange.toFixed(2)}%`);
-                        }
-                    }
-                } else if (this.timeWindow === '7d' && candles.length >= 7) {
-                    // For 7d: use 1D candles, take the 7th candle (7 days ago)
-                    const candle7dAgo = candles[6];
-                    if (candle7dAgo) {
-                        const open7dAgo = parseFloat(candle7dAgo[1]);
-                        priceChange = open7dAgo > 0 ? ((last - open7dAgo) / open7dAgo) * 100 : 0;
-                        console.log(`${item.instId} 7D: last=${last}, open7dAgo=${open7dAgo}, change=${priceChange.toFixed(2)}%`);
-                    }
-                }
+            // Log calculations for debugging
+            if (candles.length > 0) {
+                console.log(`${item.instId} price changes: 1H=${priceChange1h?.toFixed(2)}%, 4H=${priceChange4h?.toFixed(2)}%, 12H=${priceChange12h?.toFixed(2)}%, 24H=${priceChange24h?.toFixed(2)}%, 7D=${priceChange7d?.toFixed(2)}%`);
             }
             
             return {
                 ticker: item.instId,
                 last: last,
-                priceChange: priceChange,
+                priceChange1h: priceChange1h,
+                priceChange4h: priceChange4h,
+                priceChange12h: priceChange12h,
+                priceChange24h: priceChange24h,
+                priceChange7d: priceChange7d,
                 volume: volume24h,
                 hasData: true
             };
@@ -239,17 +216,32 @@ class OKXDashboard {
         
         console.log('Filtered data:', this.filteredData.length, 'items');
         
+        // Get the appropriate price change field based on selected time window
+        const getPriceChange = (item) => {
+            switch (this.timeWindow) {
+                case '1h': return item.priceChange1h;
+                case '4h': return item.priceChange4h;
+                case '12h': return item.priceChange12h;
+                case '24h': return item.priceChange24h;
+                case '7d': return item.priceChange7d;
+                default: return item.priceChange4h;
+            }
+        };
+        
         // Split into gainers and losers
         const gainers = this.filteredData
-            .filter(item => item.priceChange > 0)
-            .sort((a, b) => b.priceChange - a.priceChange);
+            .filter(item => getPriceChange(item) !== null && getPriceChange(item) > 0)
+            .sort((a, b) => getPriceChange(b) - getPriceChange(a));
             
         const losers = this.filteredData
-            .filter(item => item.priceChange < 0)
-            .sort((a, b) => a.priceChange - b.priceChange);
+            .filter(item => getPriceChange(item) !== null && getPriceChange(item) < 0)
+            .sort((a, b) => getPriceChange(a) - getPriceChange(b));
             
-        // Add neutral items (priceChange = 0) to balance the lists
-        const neutral = this.filteredData.filter(item => item.priceChange === 0);
+        // Add neutral items (priceChange = 0 or null) to balance the lists
+        const neutral = this.filteredData.filter(item => {
+            const change = getPriceChange(item);
+            return change === null || change === 0;
+        });
         
         console.log('Distribution:', { gainers: gainers.length, losers: losers.length, neutral: neutral.length });
         
@@ -301,9 +293,23 @@ class OKXDashboard {
                 `;
             }
             
-            const priceChange = item.priceChange;
+            // Get the appropriate price change based on selected time window
+            let priceChange;
+            switch (this.timeWindow) {
+                case '1h': priceChange = item.priceChange1h; break;
+                case '4h': priceChange = item.priceChange4h; break;
+                case '12h': priceChange = item.priceChange12h; break;
+                case '24h': priceChange = item.priceChange24h; break;
+                case '7d': priceChange = item.priceChange7d; break;
+                default: priceChange = item.priceChange4h; // fallback to 4h
+            }
+            
             const volume = item.volume;
             const isGinarea = this.ginareaTickers.has(item.ticker);
+            
+            // Show "..." if no data available for the selected time window
+            const priceChangeDisplay = priceChange !== null ? `${priceChange.toFixed(2)}%` : '…';
+            const changeClass = priceChange !== null ? this.getChangeClass(priceChange) : 'neutral';
             
             return `
                 <tr>
@@ -311,7 +317,7 @@ class OKXDashboard {
                         ${isGinarea ? '<span class="ginarea-logo" title="Available on Ginarea">🟢</span>' : ''}
                         ${item.ticker}
                     </td>
-                    <td class="${this.getChangeClass(priceChange)}">${priceChange.toFixed(2)}%</td>
+                    <td class="${changeClass}">${priceChangeDisplay}</td>
                     <td class="volume">${this.formatVolume(volume)}</td>
                 </tr>
             `;
