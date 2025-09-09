@@ -84,14 +84,20 @@ class OKXDashboard {
                 .slice(0, this.topN);
             console.log('Top by volume:', topByVolume.length, 'items');
 
-            // Load detailed candle data for top N
+            // Load detailed candle data, funding rates, and open interest for top N
             console.log('Fetching detailed data...');
-            const detailedData = await this.fetchDetailedData(topByVolume);
+            const [detailedData, fundingData, oiData] = await Promise.all([
+                this.fetchDetailedData(topByVolume),
+                this.fetchFundingRates(topByVolume),
+                this.fetchOpenInterest()
+            ]);
             console.log('Detailed data keys:', Object.keys(detailedData).length);
+            console.log('Funding data keys:', Object.keys(fundingData).length);
+            console.log('OI data keys:', Object.keys(oiData).length);
             
             // Process new data
             console.log('Processing data...');
-            const newData = this.processData(swapData, detailedData);
+            const newData = this.processData(swapData, detailedData, fundingData, oiData);
             console.log('Processed new data:', newData.length, 'items');
             
             // Merge with existing data (add new items, update existing ones)
@@ -164,6 +170,82 @@ class OKXDashboard {
         return detailedData;
     }
 
+    // Fetch funding rates for top instruments
+    async fetchFundingRates(topData) {
+        const fundingData = {};
+        
+        console.log(`Fetching funding rates for ${topData.length} instruments`);
+        
+        // Throttle requests to avoid rate limiting
+        for (let i = 0; i < topData.length; i += 5) {
+            const batch = topData.slice(i, i + 5);
+            const promises = batch.map(async (item) => {
+                try {
+                    const response = await fetch(
+                        `https://www.okx.com/api/v5/public/funding-rate?instId=${item.instId}`
+                    );
+                    const data = await response.json();
+                    
+                    if (data.code === '0' && data.data && data.data.length > 0) {
+                        return {
+                            instId: item.instId,
+                            fundingRate: data.data[0].fundingRate,
+                            nextFundingTime: data.data[0].nextFundingTime,
+                            nextFundingRate: data.data[0].nextFundingRate
+                        };
+                    }
+                } catch (error) {
+                    console.warn(`Failed to fetch funding rate for ${item.instId}:`, error);
+                }
+                return null;
+            });
+            
+            const results = await Promise.all(promises);
+            results.forEach(result => {
+                if (result) {
+                    fundingData[result.instId] = {
+                        fundingRate: result.fundingRate,
+                        nextFundingTime: result.nextFundingTime,
+                        nextFundingRate: result.nextFundingRate
+                    };
+                }
+            });
+            
+            // Small delay between batches
+            if (i + 5 < topData.length) {
+                await new Promise(resolve => setTimeout(resolve, 200));
+            }
+        }
+        
+        return fundingData;
+    }
+
+    // Fetch open interest data
+    async fetchOpenInterest() {
+        const oiData = {};
+        
+        try {
+            console.log('Fetching open interest data...');
+            const response = await fetch('https://www.okx.com/api/v5/public/open-interest?instType=SWAP');
+            const data = await response.json();
+            
+            if (data.code === '0' && data.data) {
+                data.data.forEach(item => {
+                    oiData[item.instId] = {
+                        oi: item.oi,
+                        oiCcy: item.oiCcy,
+                        oiUsd: item.oiUsd
+                    };
+                });
+                console.log(`Loaded OI data for ${data.data.length} instruments`);
+            }
+        } catch (error) {
+            console.warn('Failed to fetch open interest data:', error);
+        }
+        
+        return oiData;
+    }
+
     // Merge new data with existing data
     mergeData(newData) {
         // Create a map of existing data by ticker
@@ -201,7 +283,7 @@ class OKXDashboard {
         return ((last - openPrice) / openPrice) * 100;
     }
 
-    processData(tickersData, detailedData) {
+    processData(tickersData, detailedData, fundingData = {}, oiData = {}) {
         return tickersData.map(item => {
             const last = parseFloat(item.last);
             const vol24h = parseFloat(item.vol24h || '0');
@@ -217,6 +299,14 @@ class OKXDashboard {
             const priceChange24h = this.calcDelta(candles, last, 24); // 24 hours ago
             const priceChange7d = this.calcDelta(candles, last, 168); // 7 days ago (168 hours)
             
+            // Get funding rate data
+            const funding = fundingData[item.instId] || {};
+            const fundingRate = funding.fundingRate ? parseFloat(funding.fundingRate) : null;
+            
+            // Get open interest data
+            const oi = oiData[item.instId] || {};
+            const openInterest = oi.oiUsd ? parseFloat(oi.oiUsd) : null;
+            
             // Log calculations for debugging
             if (candles.length > 0) {
                 console.log(`${item.instId} price changes: 1H=${priceChange1h?.toFixed(2)}%, 4H=${priceChange4h?.toFixed(2)}%, 12H=${priceChange12h?.toFixed(2)}%, 24H=${priceChange24h?.toFixed(2)}%, 7D=${priceChange7d?.toFixed(2)}%`);
@@ -231,6 +321,8 @@ class OKXDashboard {
                 priceChange24h: priceChange24h,
                 priceChange7d: priceChange7d,
                 volume: volume24h,
+                fundingRate: fundingRate,
+                openInterest: openInterest,
                 hasData: true
             };
         });
@@ -319,6 +411,8 @@ class OKXDashboard {
                         <td class="ticker">-</td>
                         <td>-</td>
                         <td class="volume">-</td>
+                        <td>-</td>
+                        <td>-</td>
                     </tr>
                 `;
             }
@@ -341,6 +435,16 @@ class OKXDashboard {
             const priceChangeDisplay = priceChange !== null ? `${priceChange.toFixed(2)}%` : '…';
             const changeClass = priceChange !== null ? this.getChangeClass(priceChange) : 'neutral';
             
+            // Format funding rate
+            const fundingRateDisplay = item.fundingRate !== null ? 
+                `${(item.fundingRate * 100).toFixed(4)}%` : '…';
+            const fundingClass = item.fundingRate !== null ? 
+                this.getChangeClass(item.fundingRate * 100) : 'neutral';
+            
+            // Format open interest
+            const oiDisplay = item.openInterest !== null ? 
+                this.formatVolume(item.openInterest) : '…';
+            
             return `
                 <tr>
                     <td class="ticker">
@@ -349,6 +453,8 @@ class OKXDashboard {
                     </td>
                     <td class="${changeClass}">${priceChangeDisplay}</td>
                     <td class="volume">${this.formatVolume(volume)}</td>
+                    <td class="${fundingClass}">${fundingRateDisplay}</td>
+                    <td class="volume">${oiDisplay}</td>
                 </tr>
             `;
         }).join('');

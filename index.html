@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>OKX Derivatives Dashboard</title>
-    <link rel="stylesheet" href="styles.css?v=2">
+    <link rel="stylesheet" href="styles.css?v=3">
 </head>
 <body>
     <div class="container">
@@ -45,11 +45,13 @@
                                     <th>Ticker</th>
                                     <th>Price Change %</th>
                                     <th>Volume (24h)</th>
+                                    <th>Funding Rate</th>
+                                    <th>Open Interest</th>
                                 </tr>
                             </thead>
                             <tbody id="gainersBody">
                                 <tr>
-                                    <td colspan="3" class="loading">Loading data...</td>
+                                    <td colspan="5" class="loading">Loading data...</td>
                                 </tr>
                             </tbody>
                         </table>
@@ -65,11 +67,13 @@
                                     <th>Ticker</th>
                                     <th>Price Change %</th>
                                     <th>Volume (24h)</th>
+                                    <th>Funding Rate</th>
+                                    <th>Open Interest</th>
                                 </tr>
                             </thead>
                             <tbody id="losersBody">
                                 <tr>
-                                    <td colspan="3" class="loading">Loading data...</td>
+                                    <td colspan="5" class="loading">Loading data...</td>
                                 </tr>
                             </tbody>
                         </table>
@@ -83,6 +87,6 @@
         </footer>
     </div>
 
-    <script src="main.js?v=2"></script>
+    <script src="main.js?v=3"></script>
 </body>
 </html>
